@@ -1,5 +1,7 @@
 #include "PiSubmarine/Udp/Asio/Socket.h"
 
+#include <system_error>
+
 #include "PiSubmarine/Error/Api/MakeError.h"
 #include "PiSubmarine/Udp/Api/ErrorCode.h"
 
@@ -35,47 +37,49 @@ namespace PiSubmarine::Udp::Asio
         m_Socket.open(endpointResult->protocol(), errorCode);
         if (errorCode)
         {
-            return std::unexpected(MakeSystemError(Error::Api::ErrorCondition::EnvironmentError, errorCode));
+            return std::unexpected(MakeSystemError(Error::Api::ErrorCondition::CommunicationError, errorCode));
         }
 
         m_Socket.set_option(boost::asio::socket_base::reuse_address(true), errorCode);
         if (errorCode)
         {
-            return std::unexpected(MakeSystemError(Error::Api::ErrorCondition::EnvironmentError, errorCode));
+            return std::unexpected(MakeSystemError(Error::Api::ErrorCondition::CommunicationError, errorCode));
         }
 
         m_Socket.bind(*endpointResult, errorCode);
         if (errorCode)
         {
-            return std::unexpected(MakeSystemError(Error::Api::ErrorCondition::EnvironmentError, errorCode));
+            return std::unexpected(MakeSystemError(Error::Api::ErrorCondition::CommunicationError, errorCode));
         }
 
         m_Socket.non_blocking(true, errorCode);
         if (errorCode)
         {
-            return std::unexpected(MakeSystemError(Error::Api::ErrorCondition::EnvironmentError, errorCode));
+            return std::unexpected(MakeSystemError(Error::Api::ErrorCondition::CommunicationError, errorCode));
         }
 
         m_IsBound = true;
         return {};
     }
 
-    Error::Api::Result<void> Socket::Poll()
+    void Socket::Tick(const std::chrono::nanoseconds& uptime, const std::chrono::nanoseconds& deltaTime)
     {
+        static_cast<void>(uptime);
+        static_cast<void>(deltaTime);
+
         if (!m_IsBound)
         {
-            return std::unexpected(MakeApiError(
-                Error::Api::ErrorCondition::ContractError,
-                Api::ErrorCode::NotBound));
+            return;
         }
 
         while (true)
         {
             if (m_ReceiveCount == m_ReceiveSlots.size())
             {
-                return std::unexpected(MakeApiError(
-                    Error::Api::ErrorCondition::TemporaryFailure,
-                    Api::ErrorCode::ReceiveQueueOverflow));
+                auto& droppedSlot = m_ReceiveSlots[m_ReceiveTail];
+                droppedSlot.Payload.clear();
+                m_ReceiveTail = (m_ReceiveTail + 1) % m_ReceiveSlots.size();
+                --m_ReceiveCount;
             }
 
             auto& slot = m_ReceiveSlots[m_ReceiveHead];
@@ -93,15 +97,15 @@ namespace PiSubmarine::Udp::Asio
                 || errorCode == boost::asio::error::try_again)
             {
                 slot.Payload.clear();
-                return {};
+                return;
             }
 
             if (errorCode)
             {
                 slot.Payload.clear();
-                return std::unexpected(MakeSystemError(
-                    Error::Api::ErrorCondition::EnvironmentError,
-                    errorCode));
+                throw std::system_error(
+                    std::error_code(errorCode.value(), std::system_category()),
+                    "UDP receive failed");
             }
 
             slot.Payload.resize(receivedBytes);
@@ -146,7 +150,7 @@ namespace PiSubmarine::Udp::Asio
         if (errorCode)
         {
             return std::unexpected(MakeSystemError(
-                Error::Api::ErrorCondition::EnvironmentError,
+                Error::Api::ErrorCondition::CommunicationError,
                 errorCode));
         }
 

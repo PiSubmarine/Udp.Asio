@@ -6,12 +6,15 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/udp.hpp>
 
+#include "PiSubmarine/Time/ITickable.h"
+#include "PiSubmarine/Udp/Api/IBindable.h"
 #include "PiSubmarine/Udp/Api/ErrorCode.h"
-#include "PiSubmarine/Udp/Api/ISocket.h"
+#include "PiSubmarine/Udp/Api/IReceiver.h"
+#include "PiSubmarine/Udp/Api/ISender.h"
 
 namespace PiSubmarine::Udp::Asio
 {
-    class Socket final : public Api::ISocket
+    class Socket final : public Api::IBindable, public Api::ISender, public Api::IReceiver, public Time::ITickable
     {
     public:
         explicit Socket(
@@ -19,9 +22,9 @@ namespace PiSubmarine::Udp::Asio
             std::size_t maxDatagramSize = 65507);
 
         [[nodiscard]] Error::Api::Result<void> Bind(const Api::Endpoint& localEndpoint) override;
-        [[nodiscard]] Error::Api::Result<void> Poll() override;
         [[nodiscard]] Error::Api::Result<void> Send(const Api::Datagram& datagram) override;
         [[nodiscard]] Error::Api::Result<std::optional<Api::Datagram>> TryReceive() override;
+        void Tick(const std::chrono::nanoseconds& uptime, const std::chrono::nanoseconds& deltaTime) override;
 
     private:
         struct ReceiveSlot

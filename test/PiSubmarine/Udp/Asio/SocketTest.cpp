@@ -43,6 +43,25 @@ namespace PiSubmarine::Udp::Asio
         EXPECT_EQ(receiveResult->value().Payload, outgoing.Payload);
     }
 
+    TEST(SocketTest, IgnoresUnreachablePeerReceiveReset)
+    {
+        Socket socket(4);
+
+        ASSERT_TRUE(socket.Bind(Api::Endpoint{"127.0.0.1", 31021}).has_value());
+        ASSERT_TRUE(socket.Send(Api::Datagram{
+            .Peer = Api::Endpoint{"127.0.0.1", 31022},
+            .Payload = {std::byte{0x01}}})
+                        .has_value());
+
+        EXPECT_NO_THROW(socket.Tick(
+            std::chrono::nanoseconds(std::chrono::milliseconds(100)),
+            std::chrono::nanoseconds(std::chrono::milliseconds(10))));
+
+        const auto receiveResult = socket.TryReceive();
+        ASSERT_TRUE(receiveResult.has_value());
+        EXPECT_FALSE(receiveResult->has_value());
+    }
+
     TEST(SocketTest, DropsOldestBufferedDatagramWhenReceiveQueueIsFull)
     {
         Socket receiver(1);

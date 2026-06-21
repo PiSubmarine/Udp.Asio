@@ -94,7 +94,10 @@ namespace PiSubmarine::Udp::Asio
                 errorCode);
 
             if (errorCode == boost::asio::error::would_block
-                || errorCode == boost::asio::error::try_again)
+                || errorCode == boost::asio::error::try_again
+                // Windows reports ICMP "port unreachable" for a prior UDP send as a receive-side reset.
+                // Treat it like an empty poll so higher layers can keep retrying subscriptions.
+                || errorCode == boost::asio::error::connection_reset)
             {
                 slot.Payload.clear();
                 return;

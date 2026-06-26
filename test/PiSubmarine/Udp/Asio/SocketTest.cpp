@@ -43,6 +43,31 @@ namespace PiSubmarine::Udp::Asio
         EXPECT_EQ(receiveResult->value().Payload, outgoing.Payload);
     }
 
+    TEST(SocketTest, SendsDatagramsToResolvedHostname)
+    {
+        Socket receiver(4);
+        Socket sender(4);
+        const Api::Endpoint expectedPeer{"127.0.0.1", 31004};
+
+        ASSERT_TRUE(receiver.Bind(Api::Endpoint{"127.0.0.1", 31003}).has_value());
+        ASSERT_TRUE(sender.Bind(Api::Endpoint{"127.0.0.1", 31004}).has_value());
+
+        const Api::Datagram outgoing{
+            .Peer = Api::Endpoint{"localhost", 31003},
+            .Payload = {std::byte{0xBE}, std::byte{0xEF}}};
+
+        ASSERT_TRUE(sender.Send(outgoing).has_value());
+        receiver.Tick(
+            std::chrono::nanoseconds(std::chrono::milliseconds(100)),
+            std::chrono::nanoseconds(std::chrono::milliseconds(10)));
+
+        const auto receiveResult = receiver.TryReceive();
+        ASSERT_TRUE(receiveResult.has_value());
+        ASSERT_TRUE(receiveResult->has_value());
+        EXPECT_EQ(receiveResult->value().Peer, expectedPeer);
+        EXPECT_EQ(receiveResult->value().Payload, outgoing.Payload);
+    }
+
     TEST(SocketTest, IgnoresUnreachablePeerReceiveReset)
     {
         Socket socket(4);

@@ -222,13 +222,32 @@ namespace PiSubmarine::Udp::Asio
 
         boost::system::error_code errorCode;
         const auto address = boost::asio::ip::make_address(endpoint.Address, errorCode);
-        if (errorCode)
+        if (!errorCode)
+        {
+            return boost::asio::ip::udp::endpoint(address, endpoint.Port);
+        }
+
+        if (allowWildcardAddress)
         {
             return std::unexpected(MakeApiError(
                 Error::Api::ErrorCondition::ContractError,
                 Api::ErrorCode::InvalidEndpoint));
         }
 
-        return boost::asio::ip::udp::endpoint(address, endpoint.Port);
+        boost::asio::io_context ioContext;
+        boost::asio::ip::udp::resolver resolver(ioContext);
+        const auto results = resolver.resolve(
+            boost::asio::ip::udp::v4(),
+            endpoint.Address,
+            std::to_string(endpoint.Port),
+            errorCode);
+        if (errorCode || results.empty())
+        {
+            return std::unexpected(MakeApiError(
+                Error::Api::ErrorCondition::ContractError,
+                Api::ErrorCode::InvalidEndpoint));
+        }
+
+        return *results.begin();
     }
 }
